@@ -1,4 +1,6 @@
 import "package:flutter/material.dart";
+import "package:shared_preferences/shared_preferences.dart";
+import "dart:convert";
 
 void main(){
   // 最初に表示するWidget
@@ -12,12 +14,28 @@ class SimpleTodoApp extends StatefulWidget{
 
 class _SimpleTodoAppState extends State<SimpleTodoApp> {
   ThemeData _themeData = ThemeData(
-    primarySwatch: createMaterialColor(Color.fromARGB(255, 2, 156, 28)),
-    primaryColor: Color.fromARGB(255, 2, 156, 28),
+    primarySwatch: Colors.blue,  // デフォルト値を設定
+    primaryColor: Colors.blue,
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: createMaterialColor(Color.fromARGB(255, 2, 156, 28)),
+      backgroundColor: Colors.blue,
     ),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    loadThemeColor().then((color) {
+      setState(() {
+        _themeData = ThemeData(
+          primarySwatch: createMaterialColor(color),
+          primaryColor: color,
+          floatingActionButtonTheme: FloatingActionButtonThemeData(
+            backgroundColor: createMaterialColor(color),
+          ),
+        );
+      });
+    });
+  }
 
   void _changeTheme(Color color) {
     setState(() {
@@ -28,6 +46,7 @@ class _SimpleTodoAppState extends State<SimpleTodoApp> {
           backgroundColor: createMaterialColor(color),
         ),
       );
+      saveThemeColor(color); // テーマの色を保存
     });
   }
 
@@ -55,6 +74,17 @@ class TodoListPage extends StatefulWidget{
 class _TodoListPageState extends State<TodoListPage>{
   // Todoリストのデータ
   List<TodoItem> todoList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadTodoList().then((loadedList) {
+      setState(() {
+        todoList = loadedList;
+      });
+    });
+  }
+
 
   @override
   Widget build(BuildContext context){
@@ -113,6 +143,7 @@ class _TodoListPageState extends State<TodoListPage>{
                 onChanged: (bool? newValue){
                   setState(() {
                     item.isChecked = newValue ?? false;
+                    saveTodoList(todoList);
                   });
                 },
               ),
@@ -121,6 +152,7 @@ class _TodoListPageState extends State<TodoListPage>{
                 onPressed: (){
                   setState(() {
                     todoList.removeAt(index);
+                    saveTodoList(todoList);  // TodoListの保存
                   });
                 },
               ),
@@ -142,6 +174,7 @@ class _TodoListPageState extends State<TodoListPage>{
             setState((){
               // リスト追加
               todoList.add(newListText as TodoItem);
+              saveTodoList(todoList);
             });
           }
         },
@@ -250,9 +283,57 @@ class _TodoAddPageState extends State<TodoAddPage>{
   }
 }
 
-class TodoItem{
+class TodoItem {
   String text;
   bool isChecked;
 
   TodoItem({required this.text, this.isChecked = false});
+
+  // JSONからTodoItemを生成するファクトリコンストラクタ
+  factory TodoItem.fromJson(Map<String, dynamic> json) {
+    return TodoItem(
+      text: json['text'],
+      isChecked: json['isChecked'],
+    );
+  }
+
+  // TodoItemをJSONに変換するメソッド
+  Map<String, dynamic> toJson() {
+    return {
+      'text': text,
+      'isChecked': isChecked,
+    };
+  }
+}
+
+// Todoリストを保存する関数
+Future<void> saveTodoList(List<TodoItem> todoList) async{
+  final prefs = await SharedPreferences.getInstance();
+  // TodoリストをJSON形式に変換して保存
+  prefs.setString("todoList", jsonEncode(todoList.map((item) =>item.toJson()).toList()));
+}
+
+// Todoリストを読み込む関数
+Future<List<TodoItem>> loadTodoList() async {
+  final prefs = await SharedPreferences.getInstance();
+  // 保存されたTodoリストを読み込み
+  final String? todoListString = prefs.getString('todoList');
+  if (todoListString != null) {
+    // JSON形式からTodoリストに変換
+    return (jsonDecode(todoListString) as List).map((item) => TodoItem.fromJson(item)).toList();
+  }
+  return [];
+}
+
+// テーマの色を保存する関数
+Future<void> saveThemeColor(Color color) async {
+  final prefs = await SharedPreferences.getInstance();
+  prefs.setInt('themeColor', color.value);
+}
+
+// 保存されたテーマの色を読み込む関数
+Future<Color> loadThemeColor() async {
+  final prefs = await SharedPreferences.getInstance();
+  int colorValue = prefs.getInt('themeColor') ?? Colors.blue.value; // デフォルトは青色
+  return Color(colorValue);
 }
